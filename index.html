@@ -1,0 +1,837 @@
+<title>رادار الأسهم الحلال</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans+Arabic:wght@400;500;600&family=Reem+Kufi:wght@600&display=swap">
+<style>
+/* التخطيط: شريط أدوات مضغوط، جدول مستقل للأسهم المجتازة (أخضر) ثم جدول كامل لكل الأسهم؛ الشارت في ورقة منبثقة */
+:root {
+  --bg: #EDF1EF;
+  --surface: #FFFFFF;
+  --ink: #13201B;
+  --muted: #58675F;
+  --line: #D3DCD7;
+  --chip: #E4EAE7;
+  --accent: #2D3FA8;
+  --accent-ink: #FFFFFF;
+  --good: #17803D;
+  --good-bg: #DDF3E4;
+  --near: #8A6100;
+  --near-bg: #FBF1D6;
+  --bad: #B42318;
+  --bad-bg: #FCE4E1;
+  --amber: #C77700;
+  --scrim: rgba(10, 20, 15, 0.55);
+  --f-display: 'Reem Kufi', 'IBM Plex Sans Arabic', Tahoma, sans-serif;
+  --f-body: 'IBM Plex Sans Arabic', Tahoma, system-ui, sans-serif;
+  --f-num: 'IBM Plex Mono', ui-monospace, Menlo, Consolas, monospace;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #0C1311; --surface: #141D1A; --ink: #E6EEE9; --muted: #93A59B; --line: #26332E; --chip: #1D2924;
+    --accent: #8B9BFF; --accent-ink: #0C1311; --good: #4CD07D; --good-bg: #12351F; --near: #E3B94A; --near-bg: #352B0F;
+    --bad: #FF7A6B; --bad-bg: #3A1816; --amber: #F0B24A; --scrim: rgba(0, 0, 0, 0.6); color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --bg: #0C1311; --surface: #141D1A; --ink: #E6EEE9; --muted: #93A59B; --line: #26332E; --chip: #1D2924;
+  --accent: #8B9BFF; --accent-ink: #0C1311; --good: #4CD07D; --good-bg: #12351F; --near: #E3B94A; --near-bg: #352B0F;
+  --bad: #FF7A6B; --bad-bg: #3A1816; --amber: #F0B24A; --scrim: rgba(0, 0, 0, 0.6); color-scheme: dark;
+}
+* { box-sizing: border-box; }
+body { background: var(--bg); color: var(--ink); font: 400 14px/1.6 var(--f-body); padding-inline: 16px; padding-block: 16px 48px; }
+button, input, select { font: inherit; color: inherit; }
+button { cursor: pointer; }
+:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.wrap { max-width: 1180px; margin-inline: auto; display: flex; flex-direction: column; gap: 14px; }
+.num { font-family: var(--f-num); font-variant-numeric: tabular-nums; direction: ltr; unicode-bidi: isolate; display: inline-block; }
+
+header.top { display: flex; flex-wrap: wrap; align-items: flex-end; justify-content: space-between; gap: 10px 16px; }
+h1 { font: 600 28px/1.2 var(--f-display); margin: 0; letter-spacing: 0.2px; text-wrap: balance; }
+.meta { color: var(--muted); font-size: 13px; margin-top: 4px; }
+.actions { display: flex; flex-wrap: wrap; gap: 8px; }
+.btn { background: var(--surface); border: 1px solid var(--line); border-radius: 8px; padding: 6px 12px; min-height: 36px; }
+.btn:hover { border-color: var(--accent); }
+.btn.primary { background: var(--accent); color: var(--accent-ink); border-color: var(--accent); }
+.btn.mini { min-height: 28px; padding: 2px 10px; font-size: 12.5px; }
+
+.banner { background: var(--near-bg); color: var(--near); border: 1px solid var(--near); border-radius: 10px; padding: 10px 14px; font-size: 13px; }
+.banner[hidden] { display: none; }
+
+.summary { display: flex; flex-wrap: wrap; gap: 8px 28px; align-items: baseline; padding-block: 2px; }
+.summary .s b { font: 500 22px/1 var(--f-num); margin-inline-end: 6px; }
+.summary .s.g b { color: var(--good); }
+.summary .s { color: var(--muted); }
+
+.toolbar { display: flex; flex-wrap: wrap; gap: 10px 14px; align-items: center; }
+.seg { display: inline-flex; border: 1px solid var(--line); border-radius: 8px; overflow: hidden; background: var(--surface); }
+.seg button { border: 0; background: transparent; padding: 6px 14px; min-height: 36px; }
+.seg button + button { border-inline-start: 1px solid var(--line); }
+.seg button[aria-pressed="true"] { background: var(--accent); color: var(--accent-ink); }
+.chk { display: inline-flex; align-items: center; gap: 6px; min-height: 36px; }
+.chk input { width: 16px; height: 16px; accent-color: var(--accent); }
+.field { display: inline-flex; align-items: center; gap: 6px; }
+.field select, .field input[type="search"] { background: var(--surface); border: 1px solid var(--line); border-radius: 8px; padding: 6px 10px; min-height: 36px; }
+.field input[type="search"] { width: 190px; max-width: 100%; }
+
+.tabs { display: flex; gap: 4px; border-bottom: 1px solid var(--line); }
+.tabs button { background: transparent; border: 0; padding: 8px 14px; border-bottom: 2px solid transparent; margin-bottom: -1px; color: var(--muted); }
+.tabs button[aria-selected="true"] { color: var(--ink); border-bottom-color: var(--accent); font-weight: 600; }
+
+.sec { display: flex; flex-direction: column; gap: 8px; }
+.sec + .sec { margin-top: 10px; }
+.sec-h { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 6px 14px; }
+.sec-h h2 { margin: 0; font: 600 18px/1.3 var(--f-display); }
+.sec-h h2 .cnt { font: 500 14px var(--f-num); color: var(--muted); margin-inline-start: 6px; }
+.sec-h h2.g .cnt { color: var(--good); }
+.sec-ctl { display: flex; flex-wrap: wrap; gap: 8px 14px; align-items: center; }
+
+.legend { display: flex; flex-wrap: wrap; gap: 4px 14px; color: var(--muted); font-size: 12.5px; }
+.legend i { font-style: normal; font-family: var(--f-num); color: var(--ink); margin-inline-end: 4px; }
+.legend .sep { color: var(--line); }
+
+.tbl-wrap { overflow-x: auto; background: var(--surface); border: 1px solid var(--line); border-radius: 10px; }
+table { border-collapse: separate; border-spacing: 0; width: 100%; min-width: 780px; }
+th, td { text-align: start; padding: 8px 12px; border-bottom: 1px solid var(--line); white-space: nowrap; }
+th { font-weight: 500; color: var(--muted); font-size: 12.5px; background: var(--surface); }
+th button { background: none; border: 0; padding: 0; color: inherit; font-weight: inherit; }
+th button[data-on="1"] { color: var(--ink); font-weight: 600; }
+tbody tr { cursor: pointer; }
+tbody tr:hover td { background: var(--chip); }
+tbody tr:last-child td { border-bottom: 0; }
+td:first-child, th:first-child { border-inline-start: 4px solid transparent; position: sticky; inset-inline-start: 0; z-index: 1; background: var(--surface); }
+td { background: var(--surface); }
+tr.pass td { background: var(--good-bg); }
+tr.pass:hover td { background: var(--good-bg); filter: brightness(0.96); }
+tr.pass td:first-child { border-inline-start-color: var(--good); }
+tr.near td { background: var(--near-bg); }
+tr.near:hover td { background: var(--near-bg); filter: brightness(0.96); }
+tr.near td:first-child { border-inline-start-color: var(--amber); }
+.nm b { font-weight: 600; }
+.nm small { display: block; color: var(--muted); font-size: 12px; }
+.sym { font-family: var(--f-num); font-size: 12px; color: var(--muted); }
+.up { color: var(--good); }
+.dn { color: var(--bad); }
+.spark { display: block; direction: ltr; }
+.dots { display: inline-flex; gap: 3px; align-items: center; }
+.dots span { width: 13px; height: 13px; border-radius: 3px; border: 1.5px solid var(--line); background: transparent; }
+.dots span.on { background: var(--good); border-color: var(--good); }
+.dots span.gap { margin-inline-start: 6px; }
+tr.pass .dots span:not(.on), tr.near .dots span:not(.on) { border-color: var(--muted); opacity: 0.55; }
+.score { font: 500 12.5px var(--f-num); margin-inline-start: 8px; color: var(--muted); }
+tr.pass .score { background: var(--good); color: var(--surface); padding: 1px 7px; border-radius: 999px; }
+.pill { display: inline-block; border-radius: 999px; padding: 1px 10px; font-size: 12.5px; font-weight: 500; background: var(--chip); color: var(--muted); }
+.pill.strong { background: var(--good); color: var(--surface); }
+.pill.buy { background: var(--good-bg); color: var(--good); border: 1px solid var(--good); }
+.pill.watch { background: var(--near-bg); color: var(--near); }
+.pill.avoid, .pill.na { background: var(--bad-bg); color: var(--bad); }
+.tag { display: inline-block; font-size: 12px; padding: 0 8px; border-radius: 6px; background: var(--chip); color: var(--ink); margin-inline-end: 4px; }
+.tag.bo { background: var(--accent); color: var(--accent-ink); }
+.empty { padding: 26px 16px; text-align: center; color: var(--muted); }
+.hal-y { color: var(--good); font-size: 12.5px; }
+.hal-n { color: var(--bad); font-size: 12.5px; }
+.hal-q { color: var(--near); font-size: 12.5px; }
+.more { display: flex; justify-content: center; padding-top: 4px; }
+
+.cards { display: grid; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); gap: 10px; }
+.card { background: var(--surface); border: 1px solid var(--line); border-radius: 10px; padding: 12px 14px; display: flex; flex-direction: column; gap: 8px; text-align: start; min-width: 0; }
+.card:hover { border-color: var(--accent); }
+.card .r1 { display: flex; justify-content: space-between; gap: 8px; align-items: baseline; }
+.card .tags { display: flex; flex-wrap: wrap; gap: 4px; }
+.card.pass { border-color: var(--good); background: var(--good-bg); }
+
+.method { display: grid; gap: 14px; }
+.method h2 { font: 600 18px/1.3 var(--f-display); margin: 0 0 6px; }
+.mlist { display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 10px; }
+.mitem { background: var(--surface); border: 1px solid var(--line); border-radius: 10px; padding: 12px 14px; }
+.mitem h3 { margin: 0 0 2px; font-size: 14.5px; font-weight: 600; }
+.mitem .rule { font-family: var(--f-num); font-size: 12.5px; color: var(--accent); direction: rtl; }
+.mitem p { margin: 4px 0 0; color: var(--muted); font-size: 13px; }
+.prose { max-width: 70ch; color: var(--muted); }
+.prose p { margin: 0 0 8px; }
+
+.scrim { position: fixed; inset: 0; background: var(--scrim); display: flex; align-items: flex-end; justify-content: center; z-index: 20; }
+.scrim[hidden] { display: none; }
+.sheet { background: var(--bg); width: 100%; max-width: 940px; max-height: 94%; overflow-y: auto; border-radius: 14px 14px 0 0; padding: 16px; padding-bottom: calc(24px + env(safe-area-inset-bottom, 0px)); display: flex; flex-direction: column; gap: 14px; }
+.sh-head { display: flex; flex-wrap: wrap; justify-content: space-between; gap: 8px 16px; align-items: flex-start; }
+.sh-head h2 { margin: 0; font: 600 22px/1.2 var(--f-display); }
+.sh-price { font: 500 24px/1.1 var(--f-num); }
+.panel { background: var(--surface); border: 1px solid var(--line); border-radius: 10px; padding: 12px; min-width: 0; }
+.panel h3 { margin: 0 0 8px; font-size: 14px; font-weight: 600; }
+.chartbox { direction: ltr; position: relative; }
+.chartbox svg { width: 100%; height: auto; display: block; touch-action: pan-y; }
+.tip { direction: ltr; font: 400 12px var(--f-num); color: var(--muted); min-height: 18px; margin-bottom: 4px; }
+.svg-t { font: 10px var(--f-num); fill: var(--muted); }
+.cols { display: grid; grid-template-columns: 1fr; gap: 12px; }
+@media (min-width: 800px) { .cols { grid-template-columns: 1.4fr 1fr; } .scrim { align-items: center; } .sheet { border-radius: 14px; max-height: 92%; } }
+.irow { display: grid; grid-template-columns: 22px 1fr auto; gap: 4px 10px; padding: 8px 0; border-bottom: 1px solid var(--line); align-items: center; }
+.irow:last-child { border-bottom: 0; }
+.irow .mk { width: 20px; height: 20px; border-radius: 5px; display: grid; place-items: center; font-size: 13px; font-weight: 600; background: var(--bad-bg); color: var(--bad); }
+.irow.ok .mk { background: var(--good); color: var(--surface); }
+.irow .rl { color: var(--muted); font-size: 12px; grid-column: 2 / 4; }
+.kv { display: grid; grid-template-columns: 1fr auto; gap: 4px 12px; font-size: 13.5px; }
+.kv span:nth-child(odd) { color: var(--muted); }
+.lv { display: flex; flex-wrap: wrap; gap: 8px; }
+.lv > div { flex: 1 1 130px; border: 1px solid var(--line); border-radius: 8px; padding: 8px 10px; }
+.lv small { display: block; color: var(--muted); font-size: 12px; }
+.lv b { font: 500 17px var(--f-num); }
+.disc { font-size: 12.5px; color: var(--muted); }
+.star { background: none; border: 0; padding: 0 2px; font-size: 18px; line-height: 1; color: var(--muted); margin-inline-end: 6px; vertical-align: middle; }
+.star:hover, .star.on { color: var(--amber); }
+.nm .row { display: flex; align-items: center; }
+.btn.refresh[disabled] { opacity: .6; cursor: progress; }
+.wl-note { color: var(--muted); font-size: 13px; }
+.chg-since { font-size: 12px; color: var(--muted); }
+.mcards { display: flex; flex-direction: column; gap: 8px; }
+.mcard { background: var(--surface); border: 1px solid var(--line); border-radius: 10px; padding: 10px 12px; display: flex; flex-direction: column; gap: 8px; cursor: pointer; }
+.mcard.pass { background: var(--good-bg); border-color: var(--good); }
+.mcard.near { background: var(--near-bg); border-color: var(--amber); }
+.m1 { display: flex; justify-content: space-between; gap: 10px; align-items: flex-start; }
+.mn { display: flex; align-items: flex-start; gap: 4px; min-width: 0; }
+.mn b { font-weight: 600; }
+.mn small { display: block; color: var(--muted); font-size: 12px; }
+.mp { text-align: end; white-space: nowrap; }
+.m2 { display: flex; flex-wrap: wrap; gap: 6px 10px; align-items: center; }
+.m3 { display: flex; flex-wrap: wrap; gap: 4px; font-size: 12.5px; color: var(--muted); align-items: center; }
+.msort { margin-block: 2px; }
+.star { min-width: 32px; min-height: 32px; }
+@media (max-width: 700px) {
+  body { padding-inline: 12px; padding-block: 10px 28px; }
+  h1 { font-size: 22px; }
+  .summary { gap: 4px 16px; }
+  .summary .s b { font-size: 18px; }
+  .legend { display: none; }
+  .toolbar { gap: 8px; }
+  .field input[type="search"] { width: 100%; }
+  .toolbar .field { flex: 1 1 140px; }
+  .tabs button { padding: 8px 10px; }
+}
+@media (prefers-reduced-motion: no-preference) { .sheet { animation: rise .18s ease-out; } @keyframes rise { from { transform: translateY(14px); opacity: .6; } to { transform: none; opacity: 1; } } }
+h1 { display: none; }
+body { padding-block: 6px 24px; }
+header.top { justify-content: space-between; align-items: center; }
+</style>
+
+<div id="app" dir="rtl" lang="ar">
+<div class="wrap">
+  <header class="top">
+    <div>
+      <h1>رادار الأسهم الحلال</h1>
+      <div class="meta" id="meta">جارٍ التحميل…</div>
+    </div>
+    <div class="actions">
+      <button class="btn" id="btnTheme" type="button">الوضع الداكن</button>
+      
+    </div>
+  </header>
+
+  <div class="banner" id="banner" hidden></div>
+
+  <div class="summary" id="summary"></div>
+
+  <div class="toolbar">
+    <div class="seg" id="segMarket" role="group" aria-label="السوق">
+      <button type="button" data-m="ALL" aria-pressed="true">الكل</button>
+      <button type="button" data-m="SA" aria-pressed="false">السعودي</button>
+      <button type="button" data-m="US" aria-pressed="false">الأمريكي</button>
+    </div>
+    <label class="field"><input type="search" id="q" placeholder="ابحث بالاسم أو الرمز" aria-label="بحث"></label>
+  </div>
+
+  <div class="tabs" role="tablist" id="tabs">
+    <button type="button" role="tab" data-t="table" aria-selected="true">الأسهم</button>
+    <button type="button" role="tab" data-t="watch" aria-selected="false">المتابعة <span class="num" id="wcount"></span></button>
+    <button type="button" role="tab" data-t="breaks" aria-selected="false">الاختراقات</button>
+    <button type="button" role="tab" data-t="method" aria-selected="false">المنهجية</button>
+  </div>
+
+  <section id="view"></section>
+
+  <p class="disc">الأسعار مجانية ومتأخرة عن السوق، وهذه الصفحة أداة فرز وتحليل وليست نصيحة استثمارية. تحقق من الحالة الشرعية للسهم من مصدر رسمي قبل أي قرار.</p>
+</div>
+
+<div class="scrim" id="scrim" hidden>
+  <div class="sheet" id="sheet" role="dialog" aria-modal="true" aria-label="تفاصيل السهم"></div>
+</div>
+</div>
+
+
+<script>
+// محرك المؤشرات: دوال نقية تعمل في المتصفح وفي Node
+const Engine = (function () {
+  const avg = (a) => a.reduce((s, v) => s + v, 0) / (a.length || 1);
+
+  function smaS(a, n) {
+    const out = new Array(a.length).fill(null);
+    let s = 0;
+    for (let i = 0; i < a.length; i++) {
+      s += a[i];
+      if (i >= n) s -= a[i - n];
+      if (i >= n - 1) out[i] = s / n;
+    }
+    return out;
+  }
+
+  function emaS(a, n) {
+    const k = 2 / (n + 1);
+    const out = new Array(a.length).fill(null);
+    let prev = null;
+    for (let i = 0; i < a.length; i++) {
+      if (i < n - 1) continue;
+      if (prev === null) {
+        let s = 0;
+        for (let j = i - n + 1; j <= i; j++) s += a[j];
+        prev = s / n;
+      } else prev = a[i] * k + prev * (1 - k);
+      out[i] = prev;
+    }
+    return out;
+  }
+
+  function rsiS(c, n) {
+    n = n || 14;
+    const out = new Array(c.length).fill(null);
+    if (c.length <= n) return out;
+    let g = 0, l = 0;
+    for (let i = 1; i <= n; i++) {
+      const d = c[i] - c[i - 1];
+      if (d >= 0) g += d; else l -= d;
+    }
+    g /= n; l /= n;
+    out[n] = l === 0 ? 100 : 100 - 100 / (1 + g / l);
+    for (let i = n + 1; i < c.length; i++) {
+      const d = c[i] - c[i - 1];
+      g = (g * (n - 1) + Math.max(d, 0)) / n;
+      l = (l * (n - 1) + Math.max(-d, 0)) / n;
+      out[i] = l === 0 ? 100 : 100 - 100 / (1 + g / l);
+    }
+    return out;
+  }
+
+  function macdS(c) {
+    const e12 = emaS(c, 12), e26 = emaS(c, 26);
+    const m = c.map((_, i) => (e26[i] == null ? null : e12[i] - e26[i]));
+    const first = m.findIndex((v) => v != null);
+    const sig = new Array(c.length).fill(null);
+    if (first >= 0) emaS(m.slice(first), 9).forEach((v, j) => { sig[first + j] = v; });
+    return { m, sig };
+  }
+
+  function atrLast(H, L, C, n) {
+    n = n || 14;
+    if (C.length <= n) return null;
+    const tr = [];
+    for (let i = 1; i < C.length; i++) {
+      tr.push(Math.max(H[i] - L[i], Math.abs(H[i] - C[i - 1]), Math.abs(L[i] - C[i - 1])));
+    }
+    let a = avg(tr.slice(0, n));
+    for (let i = n; i < tr.length; i++) a = (a * (n - 1) + tr[i]) / n;
+    return a;
+  }
+
+  const IND = [
+    { id: 1, short: 'الاتجاه', name: 'الاتجاه (المتوسطات المتحركة)', rule: 'السعر > SMA50 > SMA200', kind: 'tech',
+      why: 'يؤكد أن السهم في اتجاه صاعد على المدى المتوسط والطويل.' },
+    { id: 2, short: 'RSI', name: 'القوة النسبية RSI(14)', rule: 'بين 50 و 70', kind: 'tech',
+      why: 'زخم إيجابي دون الوصول إلى منطقة التشبع الشرائي.' },
+    { id: 3, short: 'MACD', name: 'MACD (12، 26، 9)', rule: 'MACD فوق خط الإشارة وفوق الصفر', kind: 'tech',
+      why: 'يؤكد استمرار الزخم الصاعد وتقاطعًا إيجابيًا.' },
+    { id: 4, short: 'الحجم', name: 'حجم التداول', rule: 'متوسط 5 أيام > متوسط 20 يومًا', kind: 'tech',
+      why: 'ارتفاع السيولة يدعم الحركة ويقلل احتمال الاختراق الكاذب.' },
+    { id: 5, short: 'P/E', name: 'مكرر الربحية P/E', rule: 'من 0 إلى 25', kind: 'fin',
+      why: 'تقييم معقول مقابل الأرباح، ويستبعد الشركات الخاسرة.' },
+    { id: 6, short: 'ROE', name: 'العائد على حقوق المساهمين ROE', rule: '15% أو أكثر', kind: 'fin',
+      why: 'كفاءة الإدارة في توليد الأرباح من أموال المساهمين.' },
+    { id: 7, short: 'الدين', name: 'الدين إلى حقوق المساهمين', rule: '100% أو أقل', kind: 'fin',
+      why: 'مديونية يمكن تحملها، وتتماشى مع شروط الفحص الشرعي.' },
+  ];
+
+  const f2 = (v) => (v == null || isNaN(v) ? '—' : Number(v).toFixed(2));
+
+  function analyze(st) {
+    const b = st.bars, n = b.length, i = n - 1;
+    const C = b.map((x) => x[4]), H = b.map((x) => x[2]), L = b.map((x) => x[3]), V = b.map((x) => x[5]);
+    const s50 = smaS(C, 50), s200 = smaS(C, 200), rsi = rsiS(C, 14);
+    const { m, sig } = macdS(C);
+    const last = C[i], prev = C[i - 1];
+    const v5 = avg(V.slice(-5)), v20 = avg(V.slice(-20));
+    const f = st.fund || {};
+    const has = (v) => v != null && !isNaN(v);
+
+    const t = [
+      s50[i] != null && s200[i] != null && last > s50[i] && s50[i] > s200[i],
+      rsi[i] != null && rsi[i] >= 50 && rsi[i] <= 70,
+      m[i] != null && sig[i] != null && m[i] > sig[i] && m[i] > 0,
+      v5 > v20,
+      has(f.pe) && f.pe > 0 && f.pe <= 25,
+      has(f.roe) && f.roe >= 15,
+      has(f.de) && f.de <= 100,
+    ];
+    const vals = [
+      f2(last) + ' / ' + f2(s50[i]) + ' / ' + f2(s200[i]),
+      f2(rsi[i]),
+      f2(m[i]) + ' / ' + f2(sig[i]),
+      (v5 / v20).toFixed(2) + '×',
+      has(f.pe) ? f2(f.pe) : '—',
+      has(f.roe) ? f2(f.roe) + '%' : '—',
+      has(f.de) ? f2(f.de) + '%' : '—',
+    ];
+    const ind = IND.map((d, k) => Object.assign({}, d, { ok: !!t[k], val: vals[k] }));
+    const score = t.filter(Boolean).length;
+
+    const breakouts = [];
+    if (n > 25) {
+      const hi20 = Math.max.apply(null, H.slice(i - 20, i));
+      if (last > hi20) breakouts.push({ k: 'hi20', label: 'اختراق قمة 20 يومًا', ago: 0 });
+      const win = C.slice(Math.max(0, i - 252), i);
+      if (win.length >= 60 && last > Math.max.apply(null, win)) breakouts.push({ k: 'hi52', label: 'قمة 52 أسبوعًا', ago: 0 });
+      for (let k = 0; k < 5; k++) {
+        const j = i - k;
+        if (s200[j - 1] != null && s200[j] != null && C[j - 1] <= s200[j - 1] && C[j] > s200[j]) {
+          breakouts.push({ k: 'x200', label: 'اختراق SMA200 صعودًا', ago: k }); break;
+        }
+      }
+      for (let k = 0; k < 10; k++) {
+        const j = i - k;
+        if (s200[j - 1] != null && s50[j - 1] != null && s50[j - 1] <= s200[j - 1] && s50[j] > s200[j]) {
+          breakouts.push({ k: 'gold', label: 'التقاطع الذهبي', ago: k }); break;
+        }
+      }
+      const v20p = avg(V.slice(i - 20, i));
+      if (V[i] > 2 * v20p && last / prev - 1 > 0.02) breakouts.push({ k: 'vol', label: 'انفجار في الحجم', ago: 0 });
+    }
+
+    const atr = atrLast(H, L, C, 14);
+    let rec;
+    if (st.halal === false) rec = { code: 'na', text: 'غير مؤهل' };
+    else if (score === 7) rec = { code: 'strong', text: 'شراء قوي' };
+    else if (score === 6) rec = { code: 'buy', text: 'شراء' };
+    else if (score === 5) rec = { code: 'watch', text: 'مراقبة' };
+    else if (score === 4) rec = { code: 'hold', text: 'احتفاظ' };
+    else rec = { code: 'avoid', text: 'تجنّب' };
+
+    return {
+      last, chg: (last / prev - 1) * 100, date: b[i][0], s50, s200, rsi, macd: m, sig,
+      ind, score, breakouts, atr, stop: atr ? last - 2 * atr : null, target: atr ? last + 3 * atr : null,
+      volRatio: v5 / v20, rec,
+    };
+  }
+
+  return { analyze, IND, smaS, emaS, rsiS, macdS };
+})();
+if (typeof module !== 'undefined') module.exports = Engine;
+
+</script>
+<script>
+(function () {
+  var IND = Engine.IND;
+  var PAGE = 80;
+  var S = { rows: [], market: 'ALL', halalOnly: false, minScore: 0, q: '', sortKey: 'score', sortDir: -1, tab: 'table', sel: null, limit: PAGE, watch: {}, server: false, cur: null };
+  var $ = function (id) { return document.getElementById(id); };
+  var esc = function (s) { return String(s == null ? '' : s).replace(/[&<>"']/g, function (c) { return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]; }); };
+  var fmt = function (v, d) { if (v == null || isNaN(v)) return '—'; d = d == null ? 2 : d; return Number(v).toLocaleString('en-US', { minimumFractionDigits: d, maximumFractionDigits: d }); };
+  var fmtV = function (v) { return v >= 1e6 ? (v / 1e6).toFixed(2) + 'M' : v >= 1e3 ? (v / 1e3).toFixed(0) + 'K' : String(v); };
+  var MK = { SA: 'سعودي', US: 'أمريكي' };
+
+  /* ---------- الثيم ---------- */
+  function isDark() {
+    var t = document.documentElement.getAttribute('data-theme');
+    return t ? t === 'dark' : window.matchMedia('(prefers-color-scheme: dark)').matches;
+  }
+  function applyTheme(t) {
+    if (t) document.documentElement.setAttribute('data-theme', t); else document.documentElement.removeAttribute('data-theme');
+    $('btnTheme').textContent = isDark() ? 'الوضع الفاتح' : 'الوضع الداكن';
+  }
+  var theme = null;
+  try { theme = localStorage.getItem('radar-theme'); } catch (e) {}
+  applyTheme(theme);
+  $('btnTheme').addEventListener('click', function () {
+    theme = isDark() ? 'light' : 'dark';
+    applyTheme(theme);
+    try { localStorage.setItem('radar-theme', theme); } catch (e) {}
+  });
+
+  /* ---------- البيانات ---------- */
+  function expand(d) {
+    d.stocks.forEach(function (s) {
+      if (!s.bars && s.c && d.dates && d.dates[s.market]) {
+        var ds = d.dates[s.market];
+        s.bars = ds.map(function (dt, i) { return [dt, s.o[i], s.h[i], s.l[i], s.c[i], s.v[i] * 1000]; });
+      }
+    });
+    return d;
+  }
+  function setData(d) {
+    if (!d || !Array.isArray(d.stocks)) throw new Error('شكل الملف غير صحيح');
+    expand(d);
+    S.rows = d.stocks.filter(function (s) { return Array.isArray(s.bars) && s.bars.length > 30; }).map(function (s) { return { st: s, a: Engine.analyze(s), sp: null }; });
+    var m = d.meta || {};
+    $('meta').innerHTML = 'آخر تحديث للأسعار <span class="num">' + esc(m.asof || '—') + '</span> · أسعار متأخرة (مجانية)';
+    var b = $('banner');
+    if (m.source === 'demo') { b.hidden = false; b.textContent = 'بيانات تجريبية: الأسعار والنسب المالية مولّدة عشوائيًا لعرض شكل المنصة وليست حقيقية. شغّل fetch_data.py ثم اضغط «تحميل البيانات» لعرض الأسعار الحقيقية.'; }
+    else b.hidden = true;
+    S.limit = PAGE;
+    S.cur = d;
+    updWcount();
+    render();
+  }
+    /* ---------- مضيف Streamlit: مكوّن ثنائي الاتجاه ---------- */
+  var ST = { n: 0, first: true };
+  function post(type, extra) { window.parent.postMessage(Object.assign({ isStreamlitMessage: true, type: type }, extra || {}), '*'); }
+  function stampOf(d) { return (d && d.meta && (d.meta.fetchedAt || d.meta.asof)) || ''; }
+  function loadWatch() { S.watch = {}; }
+  function sendState() {
+    ST.n++;
+    post('streamlit:setComponentValue', { value: { stamp: stampOf(S.cur), watch: S.watch, n: ST.n }, dataType: 'json' });
+  }
+  function saveWatch() { sendState(); }
+  function fitHeight() {
+    var h = 700;
+    try { h = Math.max(520, window.parent.innerHeight - 120); } catch (e) {}
+    post('streamlit:setFrameHeight', { height: h });
+  }
+  window.addEventListener('message', function (ev) {
+    var m = ev.data;
+    if (!m || m.type !== 'streamlit:render') return;
+    var args = m.args || {};
+    if (ST.first) { ST.first = false; S.watch = args.watch || {}; updWcount(); }
+    if (args.data && Array.isArray(args.data.stocks) && stampOf(args.data) !== stampOf(S.cur)) {
+      try { setData(args.data); } catch (e) { $('meta').textContent = 'تعذر قراءة البيانات: ' + e.message; }
+      sendState();
+    } else { if (!S.cur) sendState(); render(); }
+    fitHeight();
+  });
+  window.addEventListener('resize', fitHeight);
+  loadWatch();
+  updWcount();
+  render();
+  post('streamlit:componentReady', { apiVersion: 1 });
+  fitHeight();
+
+
+  /* ---------- الفلاتر والفرز ---------- */
+  function base() {
+    var q = S.q.trim().toLowerCase();
+    return S.rows.filter(function (r) {
+      var s = r.st;
+      if (S.market !== 'ALL' && s.market !== S.market) return false;
+      if (q && (s.sym + ' ' + s.name + ' ' + (s.sector || '')).toLowerCase().indexOf(q) < 0) return false;
+      return true;
+    });
+  }
+  function isPass(r) { return r.a.score === 7 && r.st.halal === true; }
+  function sorted(rows) {
+    var k = S.sortKey, d = S.sortDir;
+    return rows.slice().sort(function (x, y) {
+      if (k === 'name') return d * -1 * x.st.name.localeCompare(y.st.name, 'ar');
+      var vx, vy;
+      if (k === 'price') { vx = x.a.last; vy = y.a.last; }
+      else if (k === 'chg') { vx = x.a.chg; vy = y.a.chg; }
+      else {
+        vx = x.a.score * 100 + (isPass(x) ? 1000 : 0) + x.a.breakouts.length * 10 + x.a.chg / 100;
+        vy = y.a.score * 100 + (isPass(y) ? 1000 : 0) + y.a.breakouts.length * 10 + y.a.chg / 100;
+      }
+      return d * (vx - vy);
+    });
+  }
+
+  /* ---------- مكونات العرض ---------- */
+  function legendHTML() {
+    return '<div class="legend">' + IND.map(function (d) { return (d.id === 5 ? '<span class="sep">|</span>' : '') + '<span><i>' + d.id + '</i>' + esc(d.short) + '</span>'; }).join('') + '</div>';
+  }
+  function dotsHTML(a) {
+    return '<span class="dots">' + a.ind.map(function (x) { return '<span class="' + (x.ok ? 'on' : '') + (x.id === 5 ? ' gap' : '') + '" title="' + x.id + '. ' + esc(x.short) + (x.ok ? ' ✓' : ' ✗') + '"></span>'; }).join('') + '</span><span class="score num">' + a.score + '/7</span>';
+  }
+  function halalHTML(s) {
+    if (s.halal === true) return '<span class="hal-y">حلال</span>';
+    if (s.halal === false) return '<span class="hal-n">غير حلال</span>';
+    return '<span class="hal-q">يحتاج تحقق</span>';
+  }
+  function boTags(a) { return a.breakouts.map(function (b) { return '<span class="tag bo">' + esc(b.label) + (b.ago ? ' · منذ ' + b.ago + ' أيام' : '') + '</span>'; }).join(''); }
+  function recPill(r) { return '<span class="pill ' + r.a.rec.code + '">' + r.a.rec.text + '</span>'; }
+  function spark(r) {
+    if (r.sp) return r.sp;
+    var c = r.st.bars.slice(-60).map(function (b) { return b[4]; });
+    var lo = Math.min.apply(null, c), hi = Math.max.apply(null, c), w = 84, h = 24, rg = (hi - lo) || 1;
+    var pts = c.map(function (v, i) { return (i / (c.length - 1) * (w - 2) + 1).toFixed(1) + ',' + (h - 2 - (v - lo) / rg * (h - 4)).toFixed(1); }).join(' ');
+    r.sp = '<svg class="spark" viewBox="0 0 ' + w + ' ' + h + '" width="' + w + '" height="' + h + '" aria-hidden="true"><polyline fill="none" stroke="' + (c[c.length - 1] >= c[0] ? 'var(--good)' : 'var(--bad)') + '" stroke-width="1.5" points="' + pts + '"/></svg>';
+    return r.sp;
+  }
+
+  /* ---------- قائمة المتابعة ---------- */
+  function wkey(s) { return s.market + ':' + s.sym; }
+  function starHTML(s) { var on = !!S.watch[wkey(s)]; return '<button type="button" class="star' + (on ? ' on' : '') + '" data-w="' + esc(wkey(s)) + '" aria-pressed="' + on + '" aria-label="' + (on ? 'إزالة من المتابعة' : 'إضافة إلى المتابعة') + '">' + (on ? '★' : '☆') + '</button>'; }
+  function sinceHTML(r) {
+    var w = S.watch[wkey(r.st)]; if (!w || !w.price) return '<span class="sym">—</span>';
+    var ch = (r.a.last / w.price - 1) * 100;
+    return '<span class="num ' + (ch >= 0 ? 'up' : 'dn') + '">' + (ch >= 0 ? '+' : '') + fmt(ch) + '%</span><div class="chg-since">من ' + fmt(w.price) + ' · ' + esc(w.date || '') + '</div>';
+  }
+  function toggleWatch(key) {
+    var r = S.rows.filter(function (x) { return wkey(x.st) === key; })[0];
+    if (S.watch[key]) delete S.watch[key];
+    else if (r) S.watch[key] = { price: r.a.last, date: r.a.date };
+    saveWatch(); updWcount(); render();
+  }
+  function updWcount() { var n = Object.keys(S.watch).length; $('wcount').textContent = n ? '(' + n + ')' : ''; }
+  function renderWatch() {
+    var keys = Object.keys(S.watch);
+    if (!keys.length) return '<div class="empty">قائمة المتابعة فارغة. اضغط النجمة ☆ بجانب أي سهم في تبويب «الأسهم» ليظهر هنا، وتُحفظ القائمة في حسابك.</div>';
+    var rows = sorted(S.rows.filter(function (r) { return S.watch[wkey(r.st)]; }));
+    var gone = keys.filter(function (k) { return !S.rows.some(function (r) { return wkey(r.st) === k; }); });
+    var passN = rows.filter(isPass).length, boN = rows.filter(function (r) { return r.a.breakouts.length; }).length;
+    return '<div class="sec"><div class="sec-h"><h2>قائمة المتابعة<span class="cnt">' + rows.length + '</span></h2><span class="wl-note">' + passN + ' منها تجتاز المؤشرات السبعة، و' + boN + ' بها اختراق</span></div>' +
+      legendHTML() + (isNarrow() ? sortBarHTML() : '') + tableHTML(rows, 'لا توجد أسهم.', true) +
+      (gone.length ? '<p class="wl-note">أسهم محفوظة غير موجودة في البيانات الحالية: ' + gone.map(esc).join('، ') + '</p>' : '') + '</div>';
+  }
+
+  function isNarrow() { return window.innerWidth <= 700; }
+  function listHTML(rows, empty, wl) {
+    if (!rows.length) return '<div class="tbl-wrap"><div class="empty">' + empty + '</div></div>';
+    return '<div class="mcards">' + rows.map(function (r) {
+      var s = r.st, a = r.a, cls = isPass(r) ? 'pass' : (a.score === 6 && s.halal === true ? 'near' : '');
+      return '<div class="mcard ' + cls + '" data-i="' + S.rows.indexOf(r) + '" tabindex="0">' +
+        '<div class="m1"><div class="mn">' + starHTML(s) + '<div><b>' + esc(s.name) + '</b><small><span class="sym">' + esc(s.sym) + '</span> · ' + (MK[s.market] || '') + '</small></div></div>' +
+        '<div class="mp"><span class="num">' + fmt(a.last) + '</span> <span class="sym">' + esc(s.currency || '') + '</span><div class="num ' + (a.chg >= 0 ? 'up' : 'dn') + '">' + (a.chg >= 0 ? '+' : '') + fmt(a.chg) + '%</div></div></div>' +
+        '<div class="m2">' + dotsHTML(a) + recPill(r) + halalHTML(s) + '</div>' +
+        (a.breakouts.length ? '<div class="m3">' + boTags(a) + '</div>' : '') +
+        (wl ? '<div class="m3">منذ الإضافة: ' + sinceHTML(r) + '</div>' : '') +
+        '</div>';
+    }).join('') + '</div>';
+  }
+  function sortBarHTML() {
+    var o = function (k, t) { return '<option value="' + k + '"' + (S.sortKey === k ? ' selected' : '') + '>' + t + '</option>'; };
+    return '<label class="field msort">ترتيب <select id="msort">' + o('score', 'الدرجة') + o('chg', 'التغير') + o('price', 'السعر') + o('name', 'الاسم') + '</select></label>';
+  }
+
+  function tableHTML(rows, empty, wl) {
+    if (isNarrow()) return listHTML(rows, empty, wl);
+    if (!rows.length) return '<div class="tbl-wrap"><div class="empty">' + empty + '</div></div>';
+    var head = function (k, label) { return '<th><button type="button" data-k="' + k + '" data-on="' + (S.sortKey === k ? 1 : 0) + '">' + label + (S.sortKey === k ? (S.sortDir < 0 ? ' ▾' : ' ▴') : '') + '</button></th>'; };
+    var body = rows.map(function (r) {
+      var s = r.st, a = r.a, cls = isPass(r) ? 'pass' : (a.score === 6 && s.halal === true ? 'near' : '');
+      return '<tr class="' + cls + '" data-i="' + S.rows.indexOf(r) + '" tabindex="0">' +
+        '<td class="nm"><div class="row">' + starHTML(s) + '<b>' + esc(s.name) + '</b></div><small><span class="sym">' + esc(s.sym) + '</span> · ' + (MK[s.market] || '') + ' · ' + esc(s.sector || '') + '</small></td>' +
+        '<td><span class="num">' + fmt(a.last) + '</span> <span class="sym">' + esc(s.currency || '') + '</span></td>' +
+        '<td><span class="num ' + (a.chg >= 0 ? 'up' : 'dn') + '">' + (a.chg >= 0 ? '+' : '') + fmt(a.chg) + '%</span></td>' +
+        '<td>' + spark(r) + '</td>' +
+        '<td>' + dotsHTML(a) + '</td>' +
+        '<td>' + recPill(r) + '</td>' +
+        '<td>' + (boTags(a) || '<span class="sym">—</span>') + '</td>' +
+        '<td>' + halalHTML(s) + '</td>' + (wl ? '<td>' + sinceHTML(r) + '</td>' : '') +
+        '<td><button type="button" class="btn mini" data-i="' + S.rows.indexOf(r) + '">الشارت</button></td></tr>';
+    }).join('');
+    return '<div class="tbl-wrap"><table><thead><tr>' + head('name', 'السهم') + head('price', 'السعر') + head('chg', 'التغير') + '<th>آخر 60 يومًا</th>' + head('score', 'المؤشرات السبعة') + '<th>التوصية</th><th>الاختراقات</th><th>الحالة الشرعية</th>' + (wl ? '<th>منذ الإضافة</th>' : '') + '<th></th></tr></thead><tbody>' + body + '</tbody></table></div>';
+  }
+
+  function renderStocks() {
+    var b = base();
+    var pass = sorted(b.filter(isPass));
+    var all = sorted(b.filter(function (r) {
+      if (S.halalOnly && r.st.halal !== true) return false;
+      return r.a.score >= S.minScore;
+    }));
+    var shown = all.slice(0, S.limit);
+    var sel = function (v, t) { return '<option value="' + v + '"' + (S.minScore === v ? ' selected' : '') + '>' + t + '</option>'; };
+    return legendHTML() + (isNarrow() ? sortBarHTML() : '') +
+      '<div class="sec"><div class="sec-h"><h2 class="g">الأسهم المجتازة للمؤشرات السبعة<span class="cnt">' + pass.length + '</span></h2></div>' +
+      tableHTML(pass, 'لا يوجد سهم حلال يجتاز المؤشرات السبعة ضمن السوق والبحث الحاليين.') + '</div>' +
+      '<div class="sec"><div class="sec-h"><h2>كل الأسهم<span class="cnt">' + all.length + '</span></h2>' +
+      '<div class="sec-ctl"><label class="chk"><input type="checkbox" id="halalOnly"' + (S.halalOnly ? ' checked' : '') + '> الحلال فقط</label>' +
+      '<label class="field">الدرجة الدنيا <select id="minScore">' + sel(0, 'الكل') + sel(5, '5 فأكثر') + sel(6, '6 فأكثر') + sel(7, '7 من 7') + '</select></label></div></div>' +
+      tableHTML(shown, 'لا توجد أسهم تطابق الفلاتر الحالية.') +
+      (all.length > shown.length ? '<div class="more"><button type="button" class="btn" id="more">عرض المزيد (' + (all.length - shown.length) + ' متبقٍ)</button></div>' : '') + '</div>';
+  }
+
+  function renderBreaks() {
+    var list = base().filter(function (r) { return r.a.breakouts.length; });
+    list.sort(function (x, y) {
+      var fx = Math.min.apply(null, x.a.breakouts.map(function (b) { return b.ago; })), fy = Math.min.apply(null, y.a.breakouts.map(function (b) { return b.ago; }));
+      return fx - fy || y.a.score - x.a.score;
+    });
+    if (!list.length) return '<div class="empty">لا توجد اختراقات حديثة ضمن السوق والبحث الحاليين.</div>';
+    return '<div class="cards">' + list.map(function (r) {
+      var s = r.st, a = r.a;
+      return '<button type="button" class="card ' + (isPass(r) ? 'pass' : '') + '" data-i="' + S.rows.indexOf(r) + '">' +
+        '<div class="r1"><span class="nm"><b>' + esc(s.name) + '</b> <span class="sym">' + esc(s.sym) + '</span></span><span class="num ' + (a.chg >= 0 ? 'up' : 'dn') + '">' + (a.chg >= 0 ? '+' : '') + fmt(a.chg) + '%</span></div>' +
+        '<div class="tags">' + boTags(a) + '</div>' +
+        '<div class="r1"><span><span class="num">' + fmt(a.last) + '</span> <span class="sym">' + esc(s.currency || '') + '</span></span><span>' + dotsHTML(a) + '</span></div>' +
+        '</button>';
+    }).join('') + '</div>';
+  }
+
+  function renderMethod() {
+    var tech = IND.filter(function (d) { return d.kind === 'tech'; }), fin = IND.filter(function (d) { return d.kind === 'fin'; });
+    var item = function (d) { return '<div class="mitem"><h3>' + d.id + '. ' + esc(d.name) + '</h3><div class="rule">' + esc(d.rule) + '</div><p>' + esc(d.why) + '</p></div>'; };
+    return '<div class="method">' +
+      '<div><h2>المؤشرات الفنية الأربعة</h2><div class="mlist">' + tech.map(item).join('') + '</div></div>' +
+      '<div><h2>المؤشرات المالية الثلاثة</h2><div class="mlist">' + fin.map(item).join('') + '</div></div>' +
+      '<div class="prose"><h2>الجدولان</h2><p>الجدول الأول يضم الأسهم الحلال التي اجتازت المؤشرات السبعة كلها، وتظهر خضراء. الجدول الثاني يضم كل الأسهم، والصف الأصفر فيه سهم حلال اجتاز ستة مؤشرات.</p>' +
+      '<p>التوصية: سبعة مؤشرات «شراء قوي»، ستة «شراء»، خمسة «مراقبة»، أربعة «احتفاظ»، وأقل من ذلك «تجنّب». السهم غير الحلال يظهر «غير مؤهل» ولا يدخل جدول المجتازة.</p>' +
+      '<h2>الاختراقات</h2><p>اختراق قمة 20 يومًا، تجاوز أعلى سعر في 52 أسبوعًا، عبور السعر فوق SMA200، التقاطع الذهبي بين SMA50 وSMA200، وانفجار الحجم مع ارتفاع أكثر من 2%.</p>' +
+      '<h2>مستويات الدخول والخروج</h2><p>وقف الخسارة = السعر − 2 × ATR(14)، والهدف = السعر + 3 × ATR(14). هي مستويات إرشادية فقط.</p>' +
+      '<h2>الفحص الشرعي</h2><p>المعايير الشائعة: الدين أقل من 33% من القيمة السوقية، والنقد والأصول المدرة للفائدة أقل من 33%، والدخل غير المشروع أقل من 5%، ونشاط الشركة مباح. تُقرأ الحالة من حقل halal في البيانات، ويُفضّل ضبطها من قائمة رسمية مثل قائمة تداول الشرعية أو Musaffa أو Zoya.</p>' +
+      '<h2>تحديث الأسعار مجانًا</h2><p>شغّل fetch_data.py مرة يوميًا بعد الإغلاق، فيجلب أسعارًا متأخرة من Yahoo Finance ويكتب data.json. بعدها اضغط «تحميل البيانات» واختر الملف، وتُحسب المؤشرات كلها داخل الصفحة.</p></div>' +
+      '</div>';
+  }
+
+  function render() {
+    var b = base();
+    var pass = b.filter(isPass).length, bo = b.filter(function (r) { return r.a.breakouts.length; }).length;
+    var sa = b.filter(function (r) { return r.st.market === 'SA'; }).length;
+    $('summary').innerHTML =
+      '<span class="s"><b>' + b.length + '</b>سهمًا (' + sa + ' سعودي، ' + (b.length - sa) + ' أمريكي)</span>' +
+      '<span class="s g"><b>' + pass + '</b>اجتازت المؤشرات السبعة</span>' +
+      '<span class="s"><b>' + bo + '</b>أسهم بها اختراق</span>';
+    var v = $('view');
+    if (S.tab === 'table') v.innerHTML = renderStocks();
+    else if (S.tab === 'watch') v.innerHTML = renderWatch();
+    else if (S.tab === 'breaks') v.innerHTML = renderBreaks();
+    else v.innerHTML = renderMethod();
+  }
+
+  /* ---------- الأحداث ---------- */
+  $('segMarket').addEventListener('click', function (e) {
+    var b = e.target.closest('button'); if (!b) return;
+    S.market = b.getAttribute('data-m'); S.limit = PAGE;
+    Array.prototype.forEach.call($('segMarket').children, function (x) { x.setAttribute('aria-pressed', x === b ? 'true' : 'false'); });
+    render();
+  });
+  $('q').addEventListener('input', function (e) { S.q = e.target.value; S.limit = PAGE; render(); });
+  $('tabs').addEventListener('click', function (e) {
+    var b = e.target.closest('button'); if (!b) return;
+    S.tab = b.getAttribute('data-t');
+    Array.prototype.forEach.call($('tabs').children, function (x) { x.setAttribute('aria-selected', x === b ? 'true' : 'false'); });
+    render();
+  });
+  $('view').addEventListener('change', function (e) {
+    if (e.target.id === 'halalOnly') { S.halalOnly = e.target.checked; S.limit = PAGE; render(); }
+    else if (e.target.id === 'minScore') { S.minScore = +e.target.value; S.limit = PAGE; render(); }
+    else if (e.target.id === 'msort') { S.sortKey = e.target.value; S.sortDir = e.target.value === 'name' ? 1 : -1; render(); }
+  });
+  $('view').addEventListener('click', function (e) {
+    if (e.target.id === 'more') { S.limit += PAGE; render(); return; }
+    var stw = e.target.closest('[data-w]'); if (stw) { toggleWatch(stw.getAttribute('data-w')); return; }
+    var th = e.target.closest('th button');
+    if (th) {
+      var k = th.getAttribute('data-k');
+      if (S.sortKey === k) S.sortDir = -S.sortDir; else { S.sortKey = k; S.sortDir = -1; }
+      render(); return;
+    }
+    var it = e.target.closest('[data-i]');
+    if (it) openDetail(+it.getAttribute('data-i'));
+  });
+  $('view').addEventListener('keydown', function (e) {
+    if (e.key === 'Enter') { var it = e.target.closest && e.target.closest('tr[data-i], .mcard[data-i]'); if (it) openDetail(+it.getAttribute('data-i')); }
+  });
+  $('scrim').addEventListener('click', function (e) { if (e.target === $('scrim') || e.target.closest('[data-close]')) closeDetail(); });
+  document.addEventListener('keydown', function (e) { if (e.key === 'Escape') closeDetail(); });
+  var wasNarrow = isNarrow(), rzT = null;
+  window.addEventListener('resize', function () {
+    clearTimeout(rzT);
+    rzT = setTimeout(function () { var n = isNarrow(); if (n !== wasNarrow) { wasNarrow = n; render(); } }, 150);
+  });
+
+  /* ---------- التفاصيل والشارت ---------- */
+  function openDetail(i) {
+    var r = S.rows[i]; if (!r) return;
+    S.sel = i;
+    var s = r.st, a = r.a, fund = s.fund || {};
+    var ratio = function (v) { return v == null ? '—' : fmt(v, 1) + '%'; };
+    $('sheet').innerHTML =
+      '<div class="sh-head"><div><h2>' + esc(s.name) + '</h2><div class="meta"><span class="sym">' + esc(s.sym) + '</span> · ' + (MK[s.market] || '') + ' · ' + esc(s.sector || '') + ' · ' + halalHTML(s) + (s.halalSrc ? ' <span class="sym">(' + (s.halalSrc === 'list' ? 'من قائمة رسمية' : s.halalSrc === 'ratios' ? 'من النسب المالية' : 'تجريبي') + ')</span>' : '') + '</div></div>' +
+      '<div style="text-align:end"><div class="sh-price">' + fmt(a.last) + ' <span class="sym">' + esc(s.currency || '') + '</span></div><div class="num ' + (a.chg >= 0 ? 'up' : 'dn') + '">' + (a.chg >= 0 ? '+' : '') + fmt(a.chg) + '% · ' + esc(a.date) + '</div></div>' +
+      '<button type="button" class="btn" data-close>إغلاق</button></div>' +
+      '<div class="panel"><div class="tip" id="tip">مرّر على الشارت لعرض تفاصيل كل يوم</div><div class="chartbox" id="chart">' + chartSVG(s, a) + '</div>' +
+      '<div class="legend" style="margin-top:6px"><span><i style="color:var(--accent)">━</i>SMA50</span><span><i style="color:var(--amber)">━</i>SMA200</span><span>الحجم أسفل السعر، وRSI(14) في الأسفل</span></div></div>' +
+      '<div class="cols"><div class="panel"><h3>المؤشرات السبعة · ' + a.score + ' من 7</h3>' +
+      a.ind.map(function (x) { return '<div class="irow ' + (x.ok ? 'ok' : '') + '"><span class="mk">' + (x.ok ? '✓' : '✗') + '</span><span>' + x.id + '. ' + esc(x.name) + '</span><span class="num">' + esc(x.val) + '</span><span class="rl">الشرط: ' + esc(x.rule) + '</span></div>'; }).join('') + '</div>' +
+      '<div style="display:flex;flex-direction:column;gap:12px;min-width:0">' +
+      '<div class="panel"><h3>التوصية والمستويات</h3><div style="margin-bottom:8px">' + recPill(r) + '</div><div class="lv">' +
+      '<div><small>وقف الخسارة (2×ATR)</small><b class="dn">' + fmt(a.stop) + '</b></div><div><small>الهدف (3×ATR)</small><b class="up">' + fmt(a.target) + '</b></div><div><small>ATR(14)</small><b>' + fmt(a.atr) + '</b></div></div></div>' +
+      '<div class="panel"><h3>الاختراقات</h3>' + (boTags(a) || '<span class="sym">لا يوجد اختراق حديث</span>') + '</div>' +
+      '<div class="panel"><h3>النسب الشرعية والمالية</h3><div class="kv">' +
+      '<span>الدين / القيمة السوقية</span><span class="num">' + ratio(fund.debtMc) + '</span>' +
+      '<span>النقد والفوائد / القيمة السوقية</span><span class="num">' + ratio(fund.cashMc) + '</span>' +
+      '<span>الدخل غير المشروع</span><span class="num">' + ratio(fund.haramInc) + '</span>' +
+      '<span>حد الدين والنقد</span><span class="num">أقل من 33%</span>' +
+      '<span>حد الدخل غير المشروع</span><span class="num">أقل من 5%</span></div></div>' +
+      '</div></div>';
+    $('scrim').hidden = false;
+    $('sheet').scrollTop = 0;
+    bindChart(s, a);
+  }
+  function closeDetail() { $('scrim').hidden = true; S.sel = null; }
+
+  function niceTicks(lo, hi, n) {
+    var span = hi - lo, raw = span / n, p = Math.pow(10, Math.floor(Math.log10(raw))), m = raw / p;
+    var step = (m < 1.5 ? 1 : m < 3.5 ? 2 : m < 7.5 ? 5 : 10) * p, out = [];
+    for (var v = Math.ceil(lo / step) * step; v <= hi + 1e-9; v += step) out.push(v);
+    return out;
+  }
+  var CH = { W: 720, H: 440, px0: 6, px1: 664, p: [10, 262], v: [272, 312], r: [330, 412], n: 130 };
+  function chartGeom(s) {
+    var bars = s.bars.slice(-CH.n), off = s.bars.length - bars.length, n = bars.length, step = (CH.px1 - CH.px0) / n;
+    return { bars: bars, off: off, n: n, step: step, x: function (i) { return CH.px0 + step * (i + 0.5); } };
+  }
+  function chartSVG(s, a) {
+    var g = chartGeom(s), b = g.bars, off = g.off, n = g.n, x = g.x;
+    var lo = Infinity, hi = -Infinity, i;
+    for (i = 0; i < n; i++) {
+      lo = Math.min(lo, b[i][3]); hi = Math.max(hi, b[i][2]);
+      [a.s50[off + i], a.s200[off + i]].forEach(function (z) { if (z != null) { lo = Math.min(lo, z); hi = Math.max(hi, z); } });
+    }
+    var padv = (hi - lo) * 0.05; lo -= padv; hi += padv;
+    var y = function (val) { return CH.p[0] + (hi - val) / (hi - lo) * (CH.p[1] - CH.p[0]); };
+    var o = '<svg viewBox="0 0 ' + CH.W + ' ' + CH.H + '" role="img" aria-label="شارت سعري لآخر ' + n + ' جلسة">';
+    niceTicks(lo, hi, 5).forEach(function (t) {
+      o += '<line x1="' + CH.px0 + '" x2="' + CH.px1 + '" y1="' + y(t) + '" y2="' + y(t) + '" stroke="var(--line)" stroke-width="1"/><text class="svg-t" x="' + (CH.px1 + 6) + '" y="' + (y(t) + 3) + '">' + fmt(t, t < 10 ? 2 : t < 1000 ? 1 : 0) + '</text>';
+    });
+    var cw = Math.max(1.6, g.step * 0.62);
+    for (i = 0; i < n; i++) {
+      var d = b[i], up = d[4] >= d[1], col = up ? 'var(--good)' : 'var(--bad)', cx = x(i);
+      o += '<line x1="' + cx + '" x2="' + cx + '" y1="' + y(d[2]) + '" y2="' + y(d[3]) + '" stroke="' + col + '" stroke-width="1"/>';
+      var y1 = y(Math.max(d[1], d[4])), y2 = y(Math.min(d[1], d[4]));
+      o += '<rect x="' + (cx - cw / 2) + '" y="' + y1 + '" width="' + cw + '" height="' + Math.max(1, y2 - y1) + '" fill="' + col + '"/>';
+    }
+    var line = function (arr, color) {
+      var pts = [];
+      for (var k = 0; k < n; k++) { var z = arr[off + k]; if (z != null) pts.push(x(k).toFixed(1) + ',' + y(z).toFixed(1)); }
+      return pts.length > 1 ? '<polyline fill="none" stroke="' + color + '" stroke-width="1.6" points="' + pts.join(' ') + '"/>' : '';
+    };
+    o += line(a.s200, 'var(--amber)') + line(a.s50, 'var(--accent)');
+    var vmax = 0; for (i = 0; i < n; i++) vmax = Math.max(vmax, b[i][5]);
+    for (i = 0; i < n; i++) {
+      var h = b[i][5] / vmax * (CH.v[1] - CH.v[0]);
+      o += '<rect x="' + (x(i) - cw / 2) + '" y="' + (CH.v[1] - h) + '" width="' + cw + '" height="' + h + '" fill="var(--muted)" opacity="0.4"/>';
+    }
+    o += '<text class="svg-t" x="' + (CH.px1 + 6) + '" y="' + (CH.v[0] + 8) + '">' + fmtV(vmax) + '</text>';
+    var ry = function (val) { return CH.r[0] + (100 - val) / 100 * (CH.r[1] - CH.r[0]); };
+    [30, 50, 70].forEach(function (t) {
+      o += '<line x1="' + CH.px0 + '" x2="' + CH.px1 + '" y1="' + ry(t) + '" y2="' + ry(t) + '" stroke="var(--line)" stroke-width="1"' + (t === 50 ? '' : ' stroke-dasharray="4 3"') + '/><text class="svg-t" x="' + (CH.px1 + 6) + '" y="' + (ry(t) + 3) + '">' + t + '</text>';
+    });
+    var rp = [];
+    for (i = 0; i < n; i++) { var rv = a.rsi[off + i]; if (rv != null) rp.push(x(i).toFixed(1) + ',' + ry(rv).toFixed(1)); }
+    o += '<polyline fill="none" stroke="var(--ink)" stroke-width="1.4" points="' + rp.join(' ') + '"/>';
+    o += '<text class="svg-t" x="' + CH.px0 + '" y="' + (CH.r[0] - 4) + '">RSI(14)</text>';
+    for (var q = 0; q < 5; q++) {
+      var di = Math.round((n - 1) * q / 4);
+      o += '<text class="svg-t" text-anchor="' + (q === 0 ? 'start' : q === 4 ? 'end' : 'middle') + '" x="' + x(di) + '" y="' + (CH.H - 6) + '">' + b[di][0] + '</text>';
+    }
+    o += '<line id="xh" x1="0" x2="0" y1="' + CH.p[0] + '" y2="' + CH.r[1] + '" stroke="var(--ink)" stroke-width="1" stroke-dasharray="3 3" opacity="0" />';
+    o += '<rect id="hit" x="0" y="0" width="' + CH.W + '" height="' + CH.H + '" fill="transparent"/>';
+    return o + '</svg>';
+  }
+  function bindChart(s, a) {
+    var svg = document.querySelector('#chart svg'); if (!svg) return;
+    var g = chartGeom(s), xh = svg.querySelector('#xh'), tip = $('tip');
+    function at(e) {
+      var r = svg.getBoundingClientRect();
+      var px = (e.clientX - r.left) / r.width * CH.W;
+      var i = Math.max(0, Math.min(g.n - 1, Math.floor((px - CH.px0) / g.step)));
+      var d = g.bars[i], rv = a.rsi[g.off + i];
+      xh.setAttribute('x1', g.x(i)); xh.setAttribute('x2', g.x(i)); xh.setAttribute('opacity', '0.6');
+      tip.textContent = d[0] + '   O ' + fmt(d[1]) + '  H ' + fmt(d[2]) + '  L ' + fmt(d[3]) + '  C ' + fmt(d[4]) + '   Vol ' + fmtV(d[5]) + '   RSI ' + fmt(rv, 1);
+    }
+    svg.addEventListener('pointermove', at);
+    svg.addEventListener('pointerdown', at);
+    svg.addEventListener('pointerleave', function () { xh.setAttribute('opacity', '0'); });
+  }
+})();
+</script>
