@@ -42,11 +42,22 @@ def get_updater():
 @st.cache_resource(show_spinner=False)
 def get_component():
     # الواجهة مضمّنة في component_html.py وتُكتب في مجلد مؤقت، فلا حاجة لرفع مجلد component
-    import component_html
+    import hashlib
+
+    try:
+        import component_html
+        ui = component_html.HTML
+        if hashlib.sha256(ui.encode("utf-8")).hexdigest() != component_html.SHA256:
+            raise ValueError("checksum")
+    except Exception as e:  # noqa: BLE001
+        raise RuntimeError(
+            "ملف component_html.py ناقص أو تالف على GitHub (%s). احذفه وأعد رفعه بزر Upload files "
+            "من الملف الأصلي، وحجمه الصحيح نحو 21 كيلوبايت." % type(e).__name__
+        ) from None
     d = os.path.join(tempfile.gettempdir(), "radar_component")
     os.makedirs(d, exist_ok=True)
     with open(os.path.join(d, "index.html"), "w", encoding="utf-8") as fh:
-        fh.write(component_html.HTML)
+        fh.write(ui)
     return components.declare_component("radar_platform", path=d)
 
 
