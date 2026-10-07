@@ -358,7 +358,7 @@ for p in _read_csv("halal.csv"):
 
 
 def pct(a, b):
-    return round(a / b * 100, 2) if a and b else None
+    return round(a / b * 100, 2) if a is not None and b else None
 
 
 def fundamentals(info):
@@ -418,11 +418,87 @@ def _history_batch(rows):
     return out
 
 
-def _info(row):
+_INFO_FAILS = [0]
+EMPTY_F = {"pe": None, "roe": None, "de": None, "debtMc": None, "cashMc": None, "haramInc": None}
+
+
+def _row(df, names):
+    """أول صف موجود من أسماء محتملة، يعيد أحدث قيمة غير فارغة."""
+    if df is None or getattr(df, "empty", True):
+        return None
+    for n in names:
+        if n in df.index:
+            ser = df.loc[n].dropna()
+            if len(ser):
+                return float(ser.iloc[0])
+    return None
+
+
+def _ttm(df, names):
+    """مجموع آخر 4 أرباع، أو آخر سنة إن لم تتوفر الأرباع."""
+    if df is None or getattr(df, "empty", True):
+        return None
+    for n in names:
+        if n in df.index:
+            ser = df.loc[n].dropna()
+            if len(ser) >= 4:
+                return float(ser.iloc[:4].sum())
+    return None
+
+
+def _from_statements(t, price):
+    """نسب مالية محسوبة من القوائم المالية عندما لا يعمل .info."""
+    f = dict(EMPTY_F)
     try:
-        return fundamentals(yf.Ticker(_ysym(row)).info or {})
+        bs = t.quarterly_balance_sheet
+        if bs is None or bs.empty:
+            bs = t.balance_sheet
+        eq = _row(bs, ["Stockholders Equity", "Common Stock Equity", "Total Equity Gross Minority Interest"])
+        debt = _row(bs, ["Total Debt"])
+        cash = _row(bs, ["Cash Cash Equivalents And Short Term Investments", "Cash And Cash Equivalents"])
+        sh = _row(bs, ["Ordinary Shares Number", "Share Issued"])
+        ni = _ttm(t.quarterly_income_stmt, ["Net Income", "Net Income Common Stockholders"])
+        if ni is None:
+            inc = t.income_stmt
+            ni = _row(inc, ["Net Income", "Net Income Common Stockholders"])
+        mc = price * sh if (price and sh) else None
+        if eq and eq > 0:
+            if ni is not None:
+                f["roe"] = round(ni / eq * 100, 2)
+            if debt is not None:
+                f["de"] = round(debt / eq * 100, 2)
+        if mc and ni:
+            f["pe"] = round(mc / ni, 2)
+        f["debtMc"] = pct(debt, mc)
+        f["cashMc"] = pct(cash or 0, mc)
     except Exception:  # noqa: BLE001
-        return {"pe": None, "roe": None, "de": None, "debtMc": None, "cashMc": None, "haramInc": None}
+        pass
+    return f
+
+
+def _info(row, price=None):
+    import time
+
+    t = yf.Ticker(_ysym(row))
+    f = dict(EMPTY_F)
+    for attempt in range(2):
+        if _INFO_FAILS[0] >= 12:  # .info محجوب: ننتقل مباشرة للقوائم المالية
+            break
+        try:
+            f = fundamentals(t.info or {})
+            if f["pe"] is not None or f["roe"] is not None or f["de"] is not None:
+                _INFO_FAILS[0] = 0
+                break
+        except Exception:  # noqa: BLE001
+            pass
+        _INFO_FAILS[0] += 1
+        time.sleep(1.0)
+    if f["pe"] is None or f["roe"] is None or f["de"] is None:
+        g = _from_statements(t, price)
+        for k, v in g.items():
+            if f.get(k) is None and v is not None:
+                f[k] = v
+    return f
 
 
 def _stock(row, bars, f):
@@ -437,6 +513,8 @@ def build(batch=40):
     """يجلب كل الأسهم (الأسعار بدفعات، ثم إعادة محاولة للفاشل، ثم النسب المالية)."""
     import time
 
+    _INFO_FAILS[0] = 0
+
     hist = {}
     for i in range(0, len(UNIVERSE), batch):
         hist.update(_history_batch(UNIVERSE[i:i + batch]))
@@ -450,7 +528,7 @@ def build(batch=40):
             hist.update(_history_batch(miss[i:i + 15]))
     rows = [r for r in UNIVERSE if r[0] in hist]
     with ThreadPoolExecutor(max_workers=4) as ex:
-        funds = list(ex.map(_info, rows))
+        funds = list(ex.map(lambda r: _info(r, hist[r[0]][-1][4]), rows))
     out = [_stock(r, hist[r[0]], f) for r, f in zip(rows, funds)]
     failed = [r[0] for r in UNIVERSE if r[0] not in hist]
     last = max((s["bars"][-1][0] for s in out), default=dt.date.today().isoformat())
