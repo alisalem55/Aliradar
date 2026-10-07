@@ -386,39 +386,76 @@ def halal_status(sym, flag, f):
     return f["debtMc"] < 33 and f["cashMc"] < 33, "ratios"
 
 
-def one(row):
-    sym, name, market, sector, flag = row
-    ysym = sym + ".SR" if market == "SA" else sym
+def _ysym(row):
+    return row[0] + ".SR" if row[2] == "SA" else row[0]
+
+
+def _bars(df):
+    df = df.dropna(subset=["Close"])
+    return [[d.strftime("%Y-%m-%d"), round(float(r.Open), 2), round(float(r.High), 2),
+             round(float(r.Low), 2), round(float(r.Close), 2), int(r.Volume or 0)]
+            for d, r in df.iterrows()][-300:]
+
+
+def _history_batch(rows):
+    """سجل الأسعار لمجموعة أسهم في طلب واحد. يعيد {الرمز: أشرطة}."""
+    out = {}
+    syms = [_ysym(r) for r in rows]
     try:
-        t = yf.Ticker(ysym)
-        hist = t.history(period="18mo", interval="1d", auto_adjust=False)
-        if len(hist) < 60:
-            print("بيانات قليلة:", sym, flush=True)
-            return None
-        bars = [[d.strftime("%Y-%m-%d"), round(float(r.Open), 2), round(float(r.High), 2),
-                 round(float(r.Low), 2), round(float(r.Close), 2), int(r.Volume)]
-                for d, r in hist.iterrows()][-300:]
+        df = yf.download(syms, period="18mo", interval="1d", auto_adjust=False,
+                         group_by="ticker", threads=True, progress=False)
+    except Exception as e:  # noqa: BLE001
+        print("فشلت الدفعة:", e, flush=True)
+        return out
+    for r, ys in zip(rows, syms):
         try:
-            f = fundamentals(t.info or {})
-        except Exception:
-            f = {"pe": None, "roe": None, "de": None, "debtMc": None, "cashMc": None, "haramInc": None}
-        halal, src = halal_status(sym, flag, f)
-        print("تم:", sym, name, flush=True)
-        return {"sym": sym, "name": name, "market": market, "sector": sector,
-                "currency": "SAR" if market == "SA" else "USD",
-                "halal": halal, "halalSrc": src, "fund": f, "bars": bars}
-    except Exception as e:
-        print("فشل:", sym, e, flush=True)
-        return None
+            sub = df[ys] if len(syms) > 1 else df
+            bars = _bars(sub)
+            if len(bars) >= 60:
+                out[r[0]] = bars
+        except Exception:  # noqa: BLE001
+            pass
+    return out
 
 
-def build():
-    """يجلب كل الأسهم ويعيد قاموس البيانات."""
+def _info(row):
+    try:
+        return fundamentals(yf.Ticker(_ysym(row)).info or {})
+    except Exception:  # noqa: BLE001
+        return {"pe": None, "roe": None, "de": None, "debtMc": None, "cashMc": None, "haramInc": None}
+
+
+def _stock(row, bars, f):
+    sym, name, market, sector, flag = row
+    halal, src = halal_status(sym, flag, f)
+    return {"sym": sym, "name": name, "market": market, "sector": sector,
+            "currency": "SAR" if market == "SA" else "USD",
+            "halal": halal, "halalSrc": src, "fund": f, "bars": bars}
+
+
+def build(batch=40):
+    """يجلب كل الأسهم (الأسعار بدفعات، ثم إعادة محاولة للفاشل، ثم النسب المالية)."""
+    import time
+
+    hist = {}
+    for i in range(0, len(UNIVERSE), batch):
+        hist.update(_history_batch(UNIVERSE[i:i + batch]))
+        print("دفعة", i // batch + 1, "جاهز", len(hist), flush=True)
+    for attempt in range(2):  # إعادة محاولة الأسهم الناقصة
+        miss = [r for r in UNIVERSE if r[0] not in hist]
+        if not miss:
+            break
+        time.sleep(3)
+        for i in range(0, len(miss), 15):
+            hist.update(_history_batch(miss[i:i + 15]))
+    rows = [r for r in UNIVERSE if r[0] in hist]
     with ThreadPoolExecutor(max_workers=4) as ex:
-        out = [x for x in ex.map(one, UNIVERSE) if x]
+        funds = list(ex.map(_info, rows))
+    out = [_stock(r, hist[r[0]], f) for r, f in zip(rows, funds)]
+    failed = [r[0] for r in UNIVERSE if r[0] not in hist]
     last = max((s["bars"][-1][0] for s in out), default=dt.date.today().isoformat())
     return {"meta": {"source": "yahoo", "asof": last, "fetchedAt": dt.datetime.utcnow().isoformat() + "Z",
-                     "delayed": True,
+                     "delayed": True, "total": len(UNIVERSE), "failed": failed,
                      "note": "أسعار متأخرة من Yahoo Finance. النسب الشرعية تقديرية، تحقق من المصدر الرسمي."},
             "stocks": out}
 
