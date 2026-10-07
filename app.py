@@ -39,25 +39,36 @@ def get_updater():
 
 
 @st.cache_resource(show_spinner=False)
+def _declare(tag, path):
+    return components.declare_component("radar_platform_" + tag, path=path)
+
+
 def get_component():
-    # الواجهة مضمّنة في component_html.py وتُكتب في مجلد مؤقت، فلا حاجة لرفع مجلد component
+    # الواجهة مضمّنة في component_html.py. نعيد قراءته عند كل تشغيل، ونكتبه في مجلد باسم بصمته،
+    # فتظهر النسخة الجديدة فورًا دون الحاجة لإعادة تشغيل الخادم أو مسح ذاكرة المتصفح.
     import hashlib
+    import importlib
 
     try:
         import component_html
+
+        component_html = importlib.reload(component_html)
         ui = component_html.HTML
-        if hashlib.sha256(ui.encode("utf-8")).hexdigest() != component_html.SHA256:
+        sha = hashlib.sha256(ui.encode("utf-8")).hexdigest()
+        if sha != component_html.SHA256:
             raise ValueError("checksum")
     except Exception as e:  # noqa: BLE001
         raise RuntimeError(
             "ملف component_html.py ناقص أو تالف على GitHub (%s). احذفه وأعد رفعه بزر Upload files "
-            "من الملف الأصلي، وحجمه الصحيح نحو 21 كيلوبايت." % type(e).__name__
+            "من الملف الأصلي، وحجمه الصحيح نحو 27 كيلوبايت." % type(e).__name__
         ) from None
-    d = os.path.join(tempfile.gettempdir(), "radar_component")
-    os.makedirs(d, exist_ok=True)
-    with open(os.path.join(d, "index.html"), "w", encoding="utf-8") as fh:
-        fh.write(ui)
-    return components.declare_component("radar_platform", path=d)
+    d = os.path.join(tempfile.gettempdir(), "radar_component_" + sha[:12])
+    idx = os.path.join(d, "index.html")
+    if not os.path.exists(idx):
+        os.makedirs(d, exist_ok=True)
+        with open(idx, "w", encoding="utf-8") as fh:
+            fh.write(ui)
+    return _declare(sha[:12], d)
 
 
 # ---------- الجلسة: تُحفظ في ذاكرة المتصفح (localStorage) فيبقى الجهاز مسجّلًا ----------
