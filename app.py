@@ -1,6 +1,5 @@
 """رادار الأسهم الحلال: تسجيل دخول، موافقة المدير، قائمة متابعة لكل حساب، وأسعار تتحدث كل 15 دقيقة."""
 import datetime as dt
-import html
 import os
 import tempfile
 import time
@@ -61,35 +60,51 @@ def get_component():
     return components.declare_component("radar_platform", path=d)
 
 
-# ---------- الجلسة والكوكي ----------
-def _cookie_js(token, days):
-    safe = html.escape(token or "", quote=True)
-    age = days * 86400 if token else 0
-    components.html(
-        f"""<script>
-        try {{
-          var d = window.parent.document;
-          var sec = window.parent.location.protocol === 'https:' ? '; Secure' : '';
-          d.cookie = '{COOKIE}={safe}; path=/; max-age={age}; SameSite=Lax' + sec;
-        }} catch (e) {{}}
-        </script>""",
-        height=0,
-    )
+# ---------- الجلسة: تُحفظ في ذاكرة المتصفح (localStorage) فيبقى الجهاز مسجّلًا ----------
+BRIDGE_HTML = """<!doctype html><meta charset="utf-8"><body style="margin:0"><script>
+(function () {
+  var KEY = 'radar_session_token', lastId = null;
+  function post(type, extra) { window.parent.postMessage(Object.assign({ isStreamlitMessage: true, type: type }, extra || {}), '*'); }
+  function get() { try { return localStorage.getItem(KEY) || ''; } catch (e) { return ''; } }
+  var sentOnce = false;
+  window.addEventListener('message', function (ev) {
+    var m = ev.data;
+    if (!m || m.type !== 'streamlit:render') return;
+    var c = (m.args || {}).cmd;
+    if (c && c.id !== lastId) {
+      lastId = c.id;
+      try { if (c.op === 'set') localStorage.setItem(KEY, c.token); else localStorage.removeItem(KEY); } catch (e) {}
+      post('streamlit:setComponentValue', { value: { token: get(), n: Date.now() }, dataType: 'json' });
+      sentOnce = true;
+    } else if (!sentOnce) {
+      sentOnce = true;
+      post('streamlit:setComponentValue', { value: { token: get(), n: Date.now() }, dataType: 'json' });
+    }
+  });
+  post('streamlit:componentReady', { apiVersion: 1 });
+  post('streamlit:setFrameHeight', { height: 0 });
+})();
+</script>"""
 
 
-def _request_token():
-    try:
-        return st.context.cookies.get(COOKIE)
-    except Exception:
-        return None
+@st.cache_resource(show_spinner=False)
+def get_bridge():
+    d = os.path.join(tempfile.gettempdir(), "radar_auth_bridge")
+    os.makedirs(d, exist_ok=True)
+    with open(os.path.join(d, "index.html"), "w", encoding="utf-8") as fh:
+        fh.write(BRIDGE_HTML)
+    return components.declare_component("radar_auth_bridge", path=d)
+
+
+def bridge_cmd(op, token=""):
+    st.session_state["_bridge_cmd"] = {"op": op, "token": token, "id": "%s-%s" % (op, time.time())}
 
 
 def current_user():
-    token = st.session_state.get("token") or _request_token()
+    token = st.session_state.get("token")
     user = auth_db.session_user(token) if token else None
     if user:
         st.session_state["user"] = user
-        st.session_state["token"] = token
         return user
     st.session_state.pop("user", None)
     st.session_state.pop("token", None)
@@ -97,10 +112,10 @@ def current_user():
 
 
 def do_logout():
-    auth_db.end_session(st.session_state.get("token") or _request_token())
+    auth_db.end_session(st.session_state.get("token"))
     for k in ("user", "token", "watch", "radar_comp"):
         st.session_state.pop(k, None)
-    st.session_state["_clear_cookie"] = True
+    bridge_cmd("clear")
     st.rerun()
 
 
@@ -125,7 +140,7 @@ def login_screen():
             if ok:
                 token = auth_db.create_session(user["username"])
                 st.session_state["user"], st.session_state["token"] = user, token
-                st.session_state["_set_cookie"] = token
+                bridge_cmd("set", token)
                 st.rerun()
             else:
                 st.error(msg)
@@ -230,7 +245,10 @@ def admin_tab(me):
     with st.container(border=True):
         st.markdown("**حالة الأسعار**")
         st.caption(f"{status} · آخر جلب: {_riyadh((data or {}).get('meta', {}).get('fetchedAt', ''))} · "
-                   f"أسهم: {len((data or {}).get('stocks', []))}")
+                   f"أسهم: {len((data or {}).get('stocks', []))} من {(data or {}).get('meta', {}).get('total', '؟')}")
+        _fl = (data or {}).get("meta", {}).get("failed") or []
+        if _fl:
+            st.caption("لم تُجلب (رمز غير مدعوم أو انقطاع مؤقت): " + "، ".join(_fl[:40]) + (" …" if len(_fl) > 40 else ""))
         if err:
             st.caption(f"آخر خطأ: {err}")
         c1, c2 = st.columns(2)
@@ -300,15 +318,19 @@ def admin_tab(me):
 
 # ---------- التشغيل ----------
 get_updater()  # يبدأ الخيط الخلفي عند أول زيارة
+_val = get_bridge()(cmd=st.session_state.get("_bridge_cmd"), key="auth_bridge", default=None)
 me = current_user()
-
-if st.session_state.pop("_clear_cookie", False):
-    _cookie_js("", 0)
+if not me and isinstance(_val, dict) and _val.get("token") and not st.session_state.get("_bridge_cmd", {}).get("op") == "clear":
+    _u = auth_db.session_user(_val["token"])
+    if _u:
+        st.session_state["token"] = _val["token"]
+        me = current_user()
+if not me and _val is None:
+    st.caption("جارٍ التحميل… إن طال الأمر حدّث الصفحة.")
+    st.stop()
 if not me:
     login_screen()
     st.stop()
-if "_set_cookie" in st.session_state:
-    _cookie_js(st.session_state.pop("_set_cookie"), auth_db.SESSION_DAYS)
 
 top1, top2 = st.columns([3, 1])
 top1.markdown(f"#### رادار الأسهم الحلال · {me['username']}")
